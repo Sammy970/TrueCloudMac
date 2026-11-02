@@ -1,0 +1,21 @@
+# Build output
+.build/
+build/
+dist/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+.swiftpm/
+
+# Signed app bundles / installers (device-specific signing)
+*.app
+*.ipa
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Secrets / local state
+*.mobileprovision
+*.p12
+*.cer
