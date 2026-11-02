@@ -41,9 +41,13 @@ final class MoonlightRunner {
         try await run(["pair", host, "--pin", pin])
     }
 
-    /// Runs `stream` and waits until the Moonlight window closes.
-    func stream(_ args: [String]) async throws -> Int32 {
-        try await run(args)
+    /// Runs `stream` and waits until the Moonlight window closes. If Moonlight reports that the host
+    /// doesn't know this Mac (the rig was re-provisioned or its pairings were cleared), it is closed
+    /// right away and `notPaired` is true so the caller can pair and try again.
+    func stream(_ args: [String]) async throws -> (status: Int32, notPaired: Bool) {
+        let watcher = UnpairedWatcher()
+        let status = try await run(args, watcher: watcher)
+        return (status, watcher.sawNotPaired)
     }
 
     func terminate() {
@@ -51,13 +55,21 @@ final class MoonlightRunner {
         current = nil
     }
 
-    private func run(_ args: [String]) async throws -> Int32 {
+    private func run(_ args: [String], watcher: UnpairedWatcher? = nil) async throws -> Int32 {
         guard let executable = Self.locate() else {
             throw TCError.server("Moonlight was not found. Install it from moonlight-stream.org or with `brew install --cask moonlight`.")
         }
         let process = Process()
         process.executableURL = executable
         process.arguments = args
+        if let watcher {
+            // Moonlight prints "Redirecting log output to <file>" and then logs there. A dialog would
+            // otherwise sit open waiting for a click, so the log is the only place to notice the problem.
+            let pipe = Pipe()
+            process.standardError = pipe
+            process.standardOutput = pipe
+            watcher.start(reading: pipe) { [weak process] in process?.terminate() }
+        }
         current = process
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -67,5 +79,42 @@ final class MoonlightRunner {
         } onCancel: {
             process.terminate()
         }
+    }
+}
+
+
+/// Spots Moonlight's "has not been paired" message in the log file it writes for a run.
+private final class UnpairedWatcher: @unchecked Sendable {
+    private let lock = NSLock()
+    private var found = false
+    private var timer: DispatchSourceTimer?
+
+    var sawNotPaired: Bool { lock.withLock { found } }
+
+    func start(reading pipe: Pipe, onFound: @escaping @Sendable () -> Void) {
+        var logPath: String?
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let text = String(decoding: handle.availableData, as: UTF8.self)
+            if let range = text.range(of: "/tmp/Moonlight-"), let end = text[range.lowerBound...].firstIndex(of: "\n") {
+                logPath = String(text[range.lowerBound..<end]).trimmingCharacters(in: .whitespaces)
+            }
+            if text.contains("has not been paired") { self?.hit(onFound) }
+        }
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + 1, repeating: 0.5)
+        timer.setEventHandler { [weak self] in
+            guard let self, let path = logPath, let data = FileManager.default.contents(atPath: path) else { return }
+            if String(decoding: data, as: UTF8.self).contains("has not been paired") { self.hit(onFound) }
+        }
+        timer.resume()
+        self.timer = timer
+    }
+
+    private func hit(_ onFound: @Sendable () -> Void) {
+        let first = lock.withLock { () -> Bool in
+            defer { found = true }
+            return !found
+        }
+        if first { timer?.cancel(); onFound() }
     }
 }

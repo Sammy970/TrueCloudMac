@@ -17,18 +17,18 @@ final class MoonlightDriver: StreamDriver {
         session.markStreaming()
         let args = settings.moonlightStreamArgs(host: host)
         Log.info("[moonlight] \(args.joined(separator: " "))")
-        let started = Date.now
-        var status = try await moonlight.stream(args)
-        Log.info("[moonlight] stream exited with \(status)")
+        var result = try await moonlight.stream(args)
+        Log.info("[moonlight] stream exited with \(result.status)")
 
-        // A stale saved pairing (e.g. after "Unpair devices" or a re-provisioned rig) fails fast: pair and retry once.
-        if skippedPairing, status != 0, Date.now.timeIntervalSince(started) < 15, !Task.isCancelled {
-            Log.info("[moonlight] stream failed quickly, re-pairing")
+        // The rig no longer knows this Mac (re-provisioned, or "Unpair devices"): pair and retry once.
+        if result.notPaired, !Task.isCancelled {
+            Log.info("[moonlight] host says it isn't paired, pairing and retrying")
             session.markPairing()
             try await pair(host: host, session: session)
+            try Task.checkCancellation()
             session.markStreaming()
-            status = try await moonlight.stream(args)
-            Log.info("[moonlight] stream exited with \(status)")
+            result = try await moonlight.stream(args)
+            Log.info("[moonlight] stream exited with \(result.status)")
         }
     }
 
