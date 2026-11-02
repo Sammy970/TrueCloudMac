@@ -37,8 +37,10 @@ final class MoonlightRunner {
 
     /// Runs `pair` and waits for it to exit. Moonlight reports "already paired" as a failure,
     /// so callers should not treat a non-zero status as fatal — `stream` will fail clearly if unpaired.
+    /// The Moonlight pair command often never exits after the host accepts the pairing, so once its
+    /// last request (the pair challenge) has been sent and the host has had a moment, it is closed.
     func pair(host: String, pin: String) async throws -> Int32 {
-        try await run(["pair", host, "--pin", pin])
+        try await run(["pair", host, "--pin", pin], watcher: UnpairedWatcher(marker: "phrase=pairchallenge", grace: 6))
     }
 
     /// Runs `stream` and waits until the Moonlight window closes. If Moonlight reports that the host
@@ -85,6 +87,14 @@ final class MoonlightRunner {
 
 /// Spots Moonlight's "has not been paired" message in the log file it writes for a run.
 private final class UnpairedWatcher: @unchecked Sendable {
+    /// Text to look for in Moonlight's output and its log file, and how long to wait after seeing it.
+    let marker: String
+    let grace: TimeInterval
+    init(marker: String = "has not been paired", grace: TimeInterval = 0) {
+        self.marker = marker
+        self.grace = grace
+    }
+
     private let lock = NSLock()
     private var found = false
     private var timer: DispatchSourceTimer?
@@ -98,23 +108,26 @@ private final class UnpairedWatcher: @unchecked Sendable {
             if let range = text.range(of: "/tmp/Moonlight-"), let end = text[range.lowerBound...].firstIndex(of: "\n") {
                 logPath = String(text[range.lowerBound..<end]).trimmingCharacters(in: .whitespaces)
             }
-            if text.contains("has not been paired") { self?.hit(onFound) }
+            if let self, text.contains(self.marker) { self.hit(onFound) }
         }
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + 1, repeating: 0.5)
         timer.setEventHandler { [weak self] in
             guard let self, let path = logPath, let data = FileManager.default.contents(atPath: path) else { return }
-            if String(decoding: data, as: UTF8.self).contains("has not been paired") { self.hit(onFound) }
+            if String(decoding: data, as: UTF8.self).contains(self.marker) { self.hit(onFound) }
         }
         timer.resume()
         self.timer = timer
     }
 
-    private func hit(_ onFound: @Sendable () -> Void) {
+    private func hit(_ onFound: @escaping @Sendable () -> Void) {
         let first = lock.withLock { () -> Bool in
             defer { found = true }
             return !found
         }
-        if first { timer?.cancel(); onFound() }
+        if first {
+            timer?.cancel()
+            if grace > 0 { DispatchQueue.global().asyncAfter(deadline: .now() + grace) { onFound() } } else { onFound() }
+        }
     }
 }

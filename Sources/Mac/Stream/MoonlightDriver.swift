@@ -40,10 +40,12 @@ final class MoonlightDriver: StreamDriver {
     /// TrueCloud's dashboard until it is accepted.
     private func pair(host: String, session: SessionService) async throws {
         let pin = String(format: "%04d", Int.random(in: 1000...9999))
+        // Moonlight takes ~10s to start and ask Sunshine to pair; a PIN sent before that is ignored.
+        // So keep sending it until the pair command exits.
         let submitPin = Task {
-            try await Task.sleep(for: .seconds(2))
-            for _ in 0..<10 where !Task.isCancelled {
-                if await session.submitPairingPIN(pin) { return }
+            try await Task.sleep(for: .seconds(8))
+            while !Task.isCancelled {
+                _ = await session.submitPairingPIN(pin)
                 try await Task.sleep(for: .seconds(3))
             }
         }
