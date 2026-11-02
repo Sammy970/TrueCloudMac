@@ -8,6 +8,7 @@
 Start the cloud PC, watch it boot, and play. Pairing with Moonlight happens on its own.
 
 <p>
+  <a href="https://github.com/Sammy970/TrueCloudMac/releases/latest"><img src="https://img.shields.io/github/v/release/Sammy970/TrueCloudMac?style=flat-square&label=download&color=00A396" alt="Download"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple&logoColor=white" alt="macOS 13+">
   <img src="https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.9">
   <img src="https://img.shields.io/badge/SwiftUI-native-00A396?style=flat-square" alt="SwiftUI">
@@ -15,7 +16,7 @@ Start the cloud PC, watch it boot, and play. Pairing with Moonlight happens on i
   <img src="https://img.shields.io/badge/unofficial-not%20affiliated%20with%20TrueCloud-B42318?style=flat-square" alt="Unofficial">
 </p>
 
-<p><a href="#the-whole-session-in-one-window"><b>Screenshots</b></a> &nbsp;·&nbsp; <a href="#features">Features</a> &nbsp;·&nbsp; <a href="#getting-started">Getting started</a> &nbsp;·&nbsp; <a href="#how-it-works">How it works</a> &nbsp;·&nbsp; <a href="#project-layout">Project layout</a> &nbsp;·&nbsp; <a href="#made-by">Made by</a></p>
+<p><a href="#download"><b>Download</b></a> &nbsp;·&nbsp; <a href="#the-whole-session-in-one-window">Screenshots</a> &nbsp;·&nbsp; <a href="#features">Features</a> &nbsp;·&nbsp; <a href="#getting-started">Getting started</a> &nbsp;·&nbsp; <a href="#how-it-works">How it works</a> &nbsp;·&nbsp; <a href="#project-layout">Project layout</a> &nbsp;·&nbsp; <a href="#made-by">Made by</a></p>
 
 </div>
 
@@ -151,7 +152,18 @@ The app follows your Mac's appearance. Teal is the only accent colour.
 
 Google sign-in, which the website also offers, isn't supported. Use "Forgot password?" once to add a password to a Google-created account.
 
+## Download
+
+**[Download TrueCloud for Mac 0.1.0](https://github.com/Sammy970/TrueCloudMac/releases/latest)**: no building needed.
+
+1. Install [Moonlight](https://moonlight-stream.org), which does the streaming: `brew install --cask moonlight`.
+2. Unzip, drag **TrueCloud** to Applications and open it.
+3. The first time, macOS can't verify the app (it isn't notarized), so go to **System Settings → Privacy & Security →
+   Open Anyway**. Only once.
+
 ## Getting started
+
+To build it yourself instead:
 
 You need macOS 13 or later, the Xcode toolchain, and [Moonlight](https://moonlight-stream.org):
 
