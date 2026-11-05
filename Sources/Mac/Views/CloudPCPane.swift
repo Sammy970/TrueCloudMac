@@ -60,7 +60,7 @@ struct CloudPCPane: View {
                     .reveal(0.18)
                     .padding(.bottom, 16)
 
-                Telemetry(status: session.status, phase: session.phase)
+                Telemetry(status: session.status, phase: session.phase, traffic: session.traffic)
                     .padding(.bottom, 16)
 
                 actions
@@ -253,8 +253,19 @@ extension StreamSettings {
 
 private struct PlanCard: View {
     let profile: RigProfile
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
+        VStack(spacing: 14) {
+            content
+            if let banner { banner }
+        }
+        .padding(18)
+        .frame(maxWidth: 520)
+        .glassSurface(cornerRadius: 22)
+    }
+
+    private var content: some View {
         HStack(alignment: .center, spacing: 22) {
             VStack(alignment: .leading, spacing: 8) {
                 Label(profile.planName, systemImage: "star.fill")
@@ -286,18 +297,50 @@ private struct PlanCard: View {
                 HStack(spacing: 0) {
                     stat("Daily quota", profile.dailyLimitHours > 360 ? "Unlimited" : RigProfile.clock(hours: profile.dailyLimitHours))
                     stat("Renewal", profile.subscription ? (profile.autoRenew ? "Auto-renews" : "Manual") : "Inactive")
+                    if let end = profile.expiration {
+                        stat("Valid until", PlanUsage.dateText(end), tint: PlanUsage.validityTint(of: profile))
+                    }
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: 520)
-        .glassSurface(cornerRadius: 22)
     }
 
-    private func stat(_ title: String, _ value: String) -> some View {
+    /// Red when the plan has ended, orange in its last days, like the dashboard's banners.
+    private var banner: AnyView? {
+        guard let end = profile.expiration else { return nil }
+        let date = PlanUsage.dateText(end)
+        if profile.isExpired() {
+            return AnyView(notice("Your plan ended on \(date). Renew it at truecloud.in to keep playing.",
+                                  symbol: "xmark.octagon.fill", tint: .red))
+        }
+        if profile.isExpiringSoon(), let days = profile.daysUntilExpiry() {
+            let when = days < 1 ? "today" : days == 1 ? "in 1 day" : "in \(days) days"
+            return AnyView(notice("Your plan ends \(when) (\(date)).", symbol: "exclamationmark.triangle.fill", tint: .orange))
+        }
+        return nil
+    }
+
+    private func notice(_ text: String, symbol: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).foregroundStyle(tint)
+            Text(text)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Renew") { openURL(Config.dashboardURL.appendingPathComponent("plans")) }
+                .textLinkStyle()
+                .font(.callout.weight(.medium))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(tint.opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.3)))
+    }
+
+    private func stat(_ title: String, _ value: String, tint: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.callout.weight(.medium)).monospacedDigit()
+            Text(value).font(.callout.weight(.medium)).monospacedDigit().foregroundStyle(tint ?? Color.primary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -305,17 +348,26 @@ private struct PlanCard: View {
 
 // MARK: - Telemetry
 
-/// Uptime, CPU and memory of the running cloud PC.
+/// Uptime, CPU and memory of the running cloud PC, then its network speed and data used.
 private struct Telemetry: View {
     let status: VmStatus?
     let phase: SessionService.Phase
+    let traffic: TrafficRate
 
     var body: some View {
         if let status, status.isRunning, phase != .shuttingDown {
-            HStack(spacing: 8) {
-                chip("clock", Self.uptime(status.uptime))
-                chip("cpu", "\(Int((status.cpu * 100).rounded()))%")
-                chip("memorychip", String(format: "%.1f / %.0f GB", status.mem / 1_073_741_824, status.maxmem / 1_073_741_824))
+            // Two rows so a narrow window never has to fit six chips side by side
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    chip("clock", Self.uptime(status.uptime))
+                    chip("cpu", "\(Int((status.cpu * 100).rounded()))%")
+                    chip("memorychip", String(format: "%.1f / %.0f GB", status.mem / 1_073_741_824, status.maxmem / 1_073_741_824))
+                }
+                HStack(spacing: 8) {
+                    chip("arrow.down", String(format: "%.2f MB/s", traffic.downloadMBps))
+                    chip("arrow.up", String(format: "%.2f MB/s", traffic.uploadMBps))
+                    chip("arrow.up.arrow.down", "\(TrafficMeter.text(bytes: status.netin + status.netout)) used")
+                }
             }
             .transition(.opacity)
         }

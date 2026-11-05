@@ -37,11 +37,13 @@ struct TrueCloudApp: App {
         guard let value = ProcessInfo.processInfo.environment["TRUECLOUD_PREVIEW"] else { return false }
         if let icon = NSImage(contentsOfFile: "TrueCloud.icns") { NSApp.applicationIconImage = icon }
         if ProcessInfo.processInfo.environment["TRUECLOUD_APPEARANCE"] == "light" { NSApp.appearance = NSAppearance(named: .aqua) }
+        // The plan ends in 25 days; `:expiring` makes it 3 and `:expired` yesterday, to see the warnings.
+        let daysLeft: Double = value.contains(":expired") ? -1 : value.contains(":expiring") ? 3.2 : 25.6
         auth.previewSignIn(value == "login" ? nil : RigProfile(
             uid: "preview", displayName: "Samyak Jain", node: "truecloud-2", vmid: 754,
             moonlightHost: "moonlight-a2.truecloud.in", currentPlan: "Basic ",
             hoursRemaining: 3.95, planHours: 10, dailyLimitHours: 2, subscription: true, autoRenew: true,
-            hasPairedBefore: true))
+            hasPairedBefore: true, expiration: Date.now.addingTimeInterval(daysLeft * 86_400)))
         return true
         #else
         return false

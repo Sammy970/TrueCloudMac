@@ -74,6 +74,43 @@ A drawn monitor shows the answer, the track below it shows how far along you are
   </tr>
 </table>
 
+## Your plan, and what your cloud PC is doing
+
+The plan card now shows the date your plan ends, and while the cloud PC runs you can see how much data it is moving.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src=".github/screenshots/dark-plan-ready.png" width="100%" alt="Cloud PC ready: the plan card shows Valid until Dec 1, 2026, and under uptime, CPU and memory a row shows download 1.42 MB/s, upload 0.18 MB/s and 2.2 GB used">
+      <p align="center"><b>Valid until, and network usage</b><br><sub>Download, upload and the data used so far, like the dashboard shows.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <img src=".github/screenshots/dark-plan-expiring.png" width="100%" alt="The plan card with an orange banner: Your plan ends in 3 days, and a Renew link">
+      <p align="center"><b>Ending soon</b><br><sub>A warning when fewer than 5 days are left, with a Renew link.</sub></p>
+    </td>
+  </tr>
+</table>
+
+If the plan has ended, a red banner says so, and Start explains why it can't start instead of failing.
+
+## Activity and payments
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset=".github/screenshots/dark-activity.png"><img src=".github/screenshots/light-activity.png" width="100%" alt="Activity: your cloud PC's starts and shutdowns grouped by day, with green and red status dots and the result TrueCloud recorded"></picture>
+      <p align="center"><b>Activity</b><br><sub>Every start, shutdown and force stop, and how it went.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset=".github/screenshots/dark-payments.png"><img src=".github/screenshots/light-payments.png" width="100%" alt="Payments: plan purchases and upgrades with date, plan, type, status and amount in rupees"></picture>
+      <p align="center"><b>Payments</b><br><sub>Your purchases and upgrades, and why a payment failed.</sub></p>
+    </td>
+  </tr>
+</table>
+
+The activity log is TrueCloud's own record of your cloud PC's power events, so it is also the quickest way to show their support exactly what happened
+(for example a shutdown that "timed out waiting for stop status"). Your IP address, which TrueCloud stores with each entry, is never shown.
+
 ## Stream settings that explain themselves
 
 <table>
@@ -143,7 +180,9 @@ The app follows your Mac's appearance. Teal is the only accent colour.
 ## Features
 
 - **Sign in** with email and password. The password is never stored; only the refresh token is, in the macOS Keychain.
-- **Your plan on the home screen:** plan name, play time left this month, daily quota and renewal.
+- **Your plan on the home screen:** plan name, play time left this month, daily quota, renewal and the date the plan ends, with a warning when it is close and a clear message when it has ended.
+- **Network usage** while the cloud PC runs: download and upload speed, and the data used so far.
+- **Activity** (every start, shutdown and force stop with its result) and **Payments** (purchases, upgrades and failures).
 - **One-click cloud PC.** Start it, watch the four-step track (Power on, Boot, Sunshine, Play), then press Play.
 - **Automatic pairing.** Moonlight shows its own PIN and the app hands it to TrueCloud, so there is nothing to type.
   If the rig doesn't know this Mac, the app pairs it on the first Play.
@@ -152,14 +191,15 @@ The app follows your Mac's appearance. Teal is the only accent colour.
 - **Network check** and **Controller check** without starting the cloud PC.
 - **In-stream overlay:** press **⌃⌥A** during a stream for a small card with time left, live latency and
   Moonlight's own shortcuts. It warns you when the connection gets busy and when plan time is running out.
-- **Readable errors:** wrong password, expired session, no plan time left, a rig that is still being built, a cooldown.
+- **Works for every account.** The app reads your own rig's address and Moonlight port from your TrueCloud profile, as the website does, so it doesn't assume anyone else's. It keeps that profile fresh while it is open.
+- **Readable errors:** wrong password, expired session, an ended plan, no plan time left, a rig that is still being built, TrueCloud pausing starts, a cooldown.
 - **Liquid Glass on macOS 26,** with a frosted fallback on earlier versions.
 
 Google sign-in, which the website also offers, isn't supported. Use "Forgot password?" once to add a password to a Google-created account.
 
 ## Download
 
-**[Download TrueCloud for Mac 0.1.0](https://github.com/Sammy970/TrueCloudMac/releases/latest)**: no building needed.
+**[Download TrueCloud for Mac 0.1.1](https://github.com/Sammy970/TrueCloudMac/releases/latest)**: no building needed.
 
 1. Install [Moonlight](https://moonlight-stream.org), which does the streaming: `brew install --cask moonlight`.
 2. Unzip, drag **TrueCloud** to Applications and open it.
@@ -202,7 +242,7 @@ TRUECLOUD_PREVIEW=login TRUECLOUD_APPEARANCE=light TRUECLOUD_SNAPSHOT=login.png 
 
 | Variable | Values |
 |---|---|
-| `TRUECLOUD_PREVIEW` | `login`, or `home:<phase>` with phase `checking`, `idle`, `starting`, `booting`, `ready`, `pairing`, `streaming` or `shutting`. Add `:stream`, `:network`, `:about` or `:controllers:sample` for a pane, `:overlay` for the overlay, or `:confirm-shutdown`, `:confirm-force`, `:confirm-unpair`, `:notice` for a dialog. |
+| `TRUECLOUD_PREVIEW` | `login`, or `home:<phase>` with phase `checking`, `idle`, `starting`, `booting`, `ready`, `pairing`, `streaming` or `shutting`. Add `:stream`, `:network`, `:about` or `:controllers:sample` for a pane, `:overlay` for the overlay, or `:confirm-shutdown`, `:confirm-force`, `:confirm-unpair`, `:notice` for a dialog. Add `:activity` or `:payments` for those panes, and `:expiring` or `:expired` to see the plan-end banners. |
 | `TRUECLOUD_APPEARANCE` | `light` forces light mode |
 | `TRUECLOUD_SNAPSHOT` | Saves the window as a PNG after it settles, then quits (`TRUECLOUD_SNAPSHOT_DELAY=<seconds>` waits longer) |
 
@@ -215,7 +255,7 @@ swift test
 ```
 
 `Tests/KitTests` covers the networking module with fixtures (Firestore and RSC parsing, Server Action request shapes, the action-ID
-resolver, Firebase requests and error mapping, retrying a stale ID) and two read-only live checks, which skip when offline.
+resolver, Firebase requests and error mapping, retrying a stale ID, per-account ports, the activity log, payments and network speeds) and two read-only live checks, which skip when offline.
 No test starts, stops or shuts down a rig, unpairs a device or sends a PIN.
 
 ## How it works
@@ -233,10 +273,14 @@ TrueCloud has no public API; the app uses the same endpoints as its website, and
 | Need | How |
 |---|---|
 | Sign in and refresh | Firebase REST (`signInWithPassword`, token refresh) with the web app's public API key |
-| Profile and plan | Firestore REST, `users/<uid>`, with the ID token |
+| Profile and plan | Firestore REST, `users/<uid>`, with the ID token: the rig's host and `moonlight_port`, plan, time left and end date |
 | Rig status | Server Action `getVmStatus` |
 | Start, shut down, force stop | Server Actions `startVm`, `shutdownVm`, `stopVm` |
-| Pair PIN, unpair | Server Actions `sendPin`, `unpairAllDevices` |
+| Pair PIN, unpair | Server Actions `sendPin`, `unpairAllDevices`; after the first accepted PIN the app sets `hasPairedBefore` on your profile, as the dashboard does |
+| Activity | Firestore `vm_logs/<vmid>-<uid>` |
+| Payments | Firestore `transactions/<uid>` |
+| Network usage | The `netin` and `netout` counters in `getVmStatus`, turned into MB/s between polls |
+| Starts paused by TrueCloud | `GET /api/system-controls` (public) |
 | Streaming | The Moonlight command line: `Moonlight pair <host> --pin N`, then `Moonlight stream <host> Desktop` |
 
 Server Action IDs change whenever TrueCloud deploys, so `ActionResolver` reads them from the rig page's JavaScript, caches them
@@ -251,7 +295,7 @@ TrueCloud and keeps resending until Moonlight reports pairing finished, then str
 |---|---|
 | `Sources/Kit/` | `TrueCloudKit` (Foundation only): Firebase, Firestore, RSC parsing, the action resolver and the rig API |
 | `Sources/Shared/` | Sign-in and Keychain, the session state machine, themes and the views shared with the iPhone app |
-| `Sources/Mac/Views/` | Sidebar, Cloud PC screen, stream settings, network and controller panes |
+| `Sources/Mac/Views/` | Sidebar, Cloud PC screen, stream settings, network, controller, activity and payments panes |
 | `Sources/Mac/Stream/` | The Moonlight runner and driver, and the in-stream overlay |
 | `Sources/Mac/Controllers/` | Controller monitor and the controllers Moonlight recognises |
 | `scripts/` | `build-app.sh`, `make-release.sh`, `make-icon.swift` (draws the icon), `update-controller-db.sh` |

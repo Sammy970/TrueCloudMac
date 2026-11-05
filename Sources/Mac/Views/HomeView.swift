@@ -1,9 +1,9 @@
 import SwiftUI
 import TrueCloudKit
 
-/// Signed-in window: a sidebar with the Cloud PC, Stream and Network panes and the account footer.
+/// Signed-in window: a sidebar with the Cloud PC, Stream, Network, Controllers, Activity and Payments panes and the account footer.
 struct HomeView: View {
-    enum Pane: Hashable { case cloudPC, stream, network, controllers, about }
+    enum Pane: Hashable { case cloudPC, stream, network, controllers, activity, payments, about }
 
     @EnvironmentObject private var auth: AuthStore
     @Environment(\.openURL) private var openURL
@@ -13,6 +13,8 @@ struct HomeView: View {
     /// Kept here so results survive switching panes.
     @StateObject private var networkCheck = NetworkCheck()
     @StateObject private var controllerMonitor = ControllerMonitor()
+    @StateObject private var activityModel = ActivityModel()
+    @StateObject private var paymentsModel = PaymentsModel()
 
     @State private var confirm: ConfirmRequest?
 
@@ -96,6 +98,10 @@ struct HomeView: View {
                         host: auth.profile.map { session.endpoint.host(for: $0) } ?? "moonlight-a2.truecloud.in")
         case .controllers:
             ControllersPane(monitor: controllerMonitor)
+        case .activity:
+            ActivityPane(model: activityModel)
+        case .payments:
+            PaymentsPane(model: paymentsModel)
         }
     }
 
@@ -122,6 +128,12 @@ struct HomeView: View {
             NavigationLink(value: Pane.controllers) {
                 Label("Controllers", systemImage: "gamecontroller")
             }
+            NavigationLink(value: Pane.activity) {
+                Label("Activity", systemImage: "clock.arrow.circlepath")
+            }
+            NavigationLink(value: Pane.payments) {
+                Label("Payments", systemImage: "creditcard")
+            }
             NavigationLink(value: Pane.about) {
                 Label("About", systemImage: "info.circle")
             }
@@ -141,14 +153,47 @@ struct HomeView: View {
         }
     }
 
-    /// Debug builds only: `TRUECLOUD_PREVIEW=home:<phase>[:stream|network|about|controllers|sample|overlay|confirm-shutdown|confirm-force|confirm-unpair|notice]`
+    #if DEBUG
+    private static var sampleActivity: [ActivityEntry] {
+        let now = Date()
+        let rows: [(String, String, TimeInterval)] = [
+            ("start", "Success: Start command sent", 2_400),
+            ("system", "Log initialized.", 2_460),
+            ("shutdown", "Success: VM stopped", 9_000),
+            ("start", "Success: Start command sent", 17_000),
+            ("shutdown", "Timed out waiting for stop status", 26_000),
+            ("shutdown", "Success: VM stopped", 30_000),
+            ("start", "Success: Start command sent", 36_000),
+            ("shutdown", "Success: VM stopped", 100_000),
+            ("start", "Success: Start command sent", 108_000),
+            ("start", "Success: Start command sent", 120_000),
+        ]
+        return rows.enumerated().map { index, row in
+            ActivityEntry(id: "\(index)", type: row.0, status: row.1, timestamp: now.addingTimeInterval(-row.2))
+        }
+    }
+
+    private static var samplePayments: [PaymentRecord] {
+        let now = Date()
+        return [
+            PaymentRecord(id: "p3", planName: "Regular", amount: 159_920, status: .pending, isUpgrade: true,
+                          createdAt: now.addingTimeInterval(-3_600)),
+            PaymentRecord(id: "p2", planName: "Regular", amount: 159_920, status: .failure, isUpgrade: true,
+                          createdAt: now.addingTimeInterval(-86_400 * 9), failureReason: "Payment declined"),
+            PaymentRecord(id: "p1", planName: "Basic", amount: 99_900, status: .success,
+                          createdAt: now.addingTimeInterval(-86_400 * 40)),
+        ]
+    }
+    #endif
+
+    /// Debug builds only: `TRUECLOUD_PREVIEW=home:<phase>[:stream|network|about|controllers|activity|payments|sample|overlay|confirm-shutdown|confirm-force|confirm-unpair|notice]`
     /// shows a phase for screenshots. Returns true in preview mode (no network polling).
     private func previewIfRequested() -> Bool {
         #if DEBUG
         guard let value = ProcessInfo.processInfo.environment["TRUECLOUD_PREVIEW"],
               value.hasPrefix("home:") else { return false }
         let running = VmStatus(status: "running", uptime: 612, hasIP: true, ip: "192.168.1.20", cpu: 0.08,
-                               mem: 4.2 * 1_073_741_824, maxmem: 19_327_352_832, isSunshineReady: true)
+                               mem: 4.2 * 1_073_741_824, maxmem: 19_327_352_832, netin: 1.8 * 1_073_741_824, netout: 0.4 * 1_073_741_824, isSunshineReady: true)
         var booting = running; booting.uptime = 38; booting.isSunshineReady = false; booting.cpu = 0.31; booting.mem = 2.1 * 1_073_741_824
         var starting = booting; starting.uptime = 9; starting.hasIP = false; starting.ip = nil; starting.cpu = 0.02; starting.mem = 0.4 * 1_073_741_824
         let phases: [String: (SessionService.Phase, VmStatus?)] = [
@@ -159,11 +204,16 @@ struct HomeView: View {
         ]
         let parts = value.dropFirst(5).split(separator: ":").map(String.init)
         if let entry = parts.first.flatMap({ phases[$0] }) { session.previewPhase(entry.0, status: entry.1) }
+        if let name = parts.first, ["ready", "pairing", "streaming", "booting", "shutting"].contains(name) {
+            session.previewTraffic(TrafficRate(downloadMBps: 1.42, uploadMBps: 0.18))
+        }
         if parts.contains("stream") { pane = .stream }
         if parts.contains("network") { pane = .network }
         if parts.contains("about") { pane = .about }
         // `:controllers` opens the pane; add `:sample` for a sample controller mid-press, without hardware.
         if parts.contains("controllers") { pane = .controllers }
+        if parts.contains("activity") { pane = .activity; activityModel.preview(Self.sampleActivity) }
+        if parts.contains("payments") { pane = .payments; paymentsModel.preview(Self.samplePayments) }
         if parts.contains("sample") { controllerMonitor.showPreview() }
         if parts.contains("overlay") { StreamOverlayPanel.shared.begin(host: "moonlight-a2.truecloud.in:35450", profile: auth.profile) }
         if parts.contains("notice") {

@@ -26,12 +26,19 @@ final class MoonlightRunner {
         guard let defaults = UserDefaults(suiteName: "com.moonlight-stream.Moonlight") else { return false }
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else { return false }
+        // Moonlight keeps a host's address and port in separate keys (`manualaddress` and `manualport`), and TrueCloud
+        // tells accounts on one gateway apart by port. Compare both, or a second account on the same gateway name
+        // would look already paired and its pairing would be skipped.
+        let parts = host.split(separator: ":")
+        let bare = parts.first.map(String.init) ?? host
+        let port = parts.dropFirst().first.flatMap { Int($0) }
         return (1...count).contains { i in
-            let addresses = ["manualaddress", "localaddress", "remoteaddress"]
-                .compactMap { defaults.string(forKey: "hosts.\(i).\($0)") }
-            let cert = defaults.data(forKey: "hosts.\(i).srvcert")
-            let bare = host.split(separator: ":").first.map(String.init) ?? host
-            return addresses.contains { $0 == host || $0 == bare } && !(cert?.isEmpty ?? true)
+            guard let cert = defaults.data(forKey: "hosts.\(i).srvcert"), !cert.isEmpty else { return false }
+            return ["manual", "local", "remote"].contains { kind in
+                guard let address = defaults.string(forKey: "hosts.\(i).\(kind)address"), address == host || address == bare else { return false }
+                let stored = defaults.integer(forKey: "hosts.\(i).\(kind)port")
+                return port == nil || stored == 0 || stored == port
+            }
         }
     }
 
