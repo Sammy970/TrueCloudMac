@@ -7,7 +7,8 @@ import TrueCloudKit
 /// - **Cloud PC controls** (truecloud.in): every Server Action the app calls still exists and takes the same
 ///   number of values, the admin switches still read the same, and a live status call answers.
 /// - **Account** (Firestore): the profile still has the fields the app connects with.
-/// - **Activity** and **Payments** (Firestore): both still load and parse.
+/// - **Activity** and **Payments**: both still load and parse.
+/// - A deliberate refusal (TrueCloud blocking apps) is reported as `blocked`, not as being offline.
 ///
 /// When the controls check fails, Start, Shut Down and pairing are disabled with the reason, because pressing
 /// them could do the wrong thing. Activity and Payments problems only affect those panes.
@@ -25,7 +26,9 @@ final class SiteHealth: ObservableObject {
         case ok
         /// TrueCloud changed something this app depends on: update needed.
         case changed([String])
-        /// Couldn't check (offline, TrueCloud down, blocked). Says nothing about compatibility.
+        /// TrueCloud's website answered, but refused this app on purpose (its own words). Only an update can fix it.
+        case blocked(String)
+        /// Couldn't check (offline, TrueCloud down). Says nothing about compatibility.
         case unreachable(String)
     }
 
@@ -38,11 +41,23 @@ final class SiteHealth: ObservableObject {
 
     /// Why the cloud PC controls must not be used right now, or nil.
     var controlsBlock: SessionService.Notice? {
+        if let reason = blockedReason {
+            return SessionService.Notice(
+                title: "TrueCloud Is Blocking This App",
+                message: "TrueCloud's website stopped accepting requests from this app, so it can't start, stop or pair your "
+                    + "cloud PC right now. Check for an update, or use truecloud.in until then.\n\nTrueCloud said: \"\(reason)\"")
+        }
         guard case .changed(let details) = results[.controls] else { return nil }
         return SessionService.Notice(
             title: "Update Needed",
             message: "TrueCloud changed its website, and this version of the app can't control your cloud PC safely. "
                 + "Please update the app. Until then, start and stop it at truecloud.in.\n\n" + details.map { "• " + $0 }.joined(separator: "\n"))
+    }
+
+    /// TrueCloud's refusal, when any check was refused.
+    var blockedReason: String? {
+        for area in Area.allCases { if case .blocked(let reason) = results[area] { return reason } }
+        return nil
     }
 
     var hasProblem: Bool {
@@ -87,12 +102,19 @@ final class SiteHealth: ObservableObject {
             switch fresh[area] {
             case .ok: Log.info("[check] \(area.rawValue): OK")
             case .changed(let details): Log.info("[check] \(area.rawValue): CHANGED — " + details.joined(separator: "; "))
+            case .blocked(let reason): Log.info("[check] \(area.rawValue): BLOCKED — \(reason)")
             case .unreachable(let reason): Log.info("[check] \(area.rawValue): couldn't check — \(reason)")
             case nil: break
             }
         }
         results = fresh
+        // A refusal is usually fixed by a new version: look for one now rather than in a few hours.
+        if blockedReason != nil { await UpdateChecker.shared.check() }
     }
+
+    #if DEBUG
+    func preview(_ results: [Area: Result]) { self.results = results }
+    #endif
 
     // MARK: Checks
 
@@ -112,6 +134,7 @@ final class SiteHealth: ObservableObject {
             switch error {
             case .actionsUnavailable: return .changed(["TrueCloud's site no longer lists the actions this app uses"])
             case .unexpectedResponse: return .changed(["TrueCloud's status answer is in a format this app doesn't know"])
+            case .clientBlocked(let reason): return .blocked(reason)
             default: return .unreachable(error.localizedDescription)
             }
         } catch {
@@ -134,6 +157,8 @@ final class SiteHealth: ObservableObject {
             return .ok
         } catch TCError.unexpectedResponse {
             return .changed(["TrueCloud stores this in a format this app doesn't know"])
+        } catch TCError.clientBlocked(let reason) {
+            return .blocked(reason)
         } catch {
             return .unreachable(error.localizedDescription)
         }

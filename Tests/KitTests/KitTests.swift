@@ -468,3 +468,37 @@ final class AccountTests: XCTestCase {
         XCTAssertFalse(profile(nil).isExpiringSoon(at: now))
     }
 }
+
+final class AppUpdateTests: XCTestCase {
+    func testVersionCompare() {
+        XCTAssertTrue(AppVersion.isNewer("0.1.3", than: "0.1.2"))
+        XCTAssertTrue(AppVersion.isNewer("v0.1.10", than: "0.1.9"), "numeric, not text, order")
+        XCTAssertTrue(AppVersion.isNewer("0.2", than: "0.1.9"))
+        XCTAssertFalse(AppVersion.isNewer("0.2", than: "0.2.0"))
+        XCTAssertFalse(AppVersion.isNewer("v0.1.1", than: "0.1.2"))
+        XCTAssertFalse(AppVersion.isNewer("0.1.3-beta", than: "0.1.2"), "unreadable tags never count as newer")
+        XCTAssertEqual(AppVersion.normalized("v0.1.2"), "0.1.2")
+        XCTAssertNil(AppVersion.normalized("latest"))
+    }
+
+    func testReleaseParse() throws {
+        let json: [String: Any] = ["tag_name": "v0.1.3", "html_url": "https://github.com/Sammy970/TrueCloudMac/releases/tag/v0.1.3",
+                                   "draft": false, "prerelease": false, "published_at": "2026-11-06T10:00:00Z"]
+        let r = try XCTUnwrap(AppRelease(json: json))
+        XCTAssertEqual(r.version, "0.1.3")
+        XCTAssertNotNil(r.publishedAt)
+        var pre = json; pre["prerelease"] = true
+        XCTAssertNil(AppRelease(json: pre))
+        XCTAssertNil(AppRelease(json: ["message": "Not Found"]))
+    }
+
+    func testClientReadsLatestAndNoReleaseIsNil() async throws {
+        let body = #"{"tag_name":"v9.9.9","html_url":"https://github.com/x/y/releases/tag/v9.9.9","draft":false,"prerelease":false}"#
+        let t = MockTransport([(body, 200), (#"{"message":"Not Found"}"#, 404)])
+        let latest = try await UpdateClient(transport: t).latest()
+        XCTAssertEqual(latest?.version, "9.9.9")
+        XCTAssertEqual(t.requests[0].url, UpdateClient.latestURL)
+        let none = try await UpdateClient(transport: t).latest()
+        XCTAssertNil(none)
+    }
+}

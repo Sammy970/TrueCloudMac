@@ -134,6 +134,7 @@ final class SessionService: ObservableObject {
 
     func startPolling() {
         health.start(auth: auth)
+        UpdateChecker.shared.start()
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {

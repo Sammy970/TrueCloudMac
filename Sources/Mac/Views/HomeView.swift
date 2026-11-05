@@ -191,7 +191,7 @@ struct HomeView: View {
     }
     #endif
 
-    /// Debug builds only: `TRUECLOUD_PREVIEW=home:<phase>[:stream|network|about|controllers|activity|payments|sample|overlay|confirm-shutdown|confirm-force|confirm-unpair|notice]`
+    /// Debug builds only: `TRUECLOUD_PREVIEW=home:<phase>[:stream|network|about|controllers|activity|payments|sample|overlay|confirm-shutdown|confirm-force|confirm-unpair|notice|blocked|changed|update]`
     /// shows a phase for screenshots. Returns true in preview mode (no network polling).
     private func previewIfRequested() -> Bool {
         #if DEBUG
@@ -222,6 +222,15 @@ struct HomeView: View {
         if parts.contains("payments") { pane = .payments; paymentsModel.preview(Self.samplePayments) }
         if parts.contains("sample") { controllerMonitor.showPreview() }
         if parts.contains("overlay") { StreamOverlayPanel.shared.begin(host: "moonlight-a2.truecloud.in:35450", profile: auth.profile) }
+        // Banners: `:blocked` (TrueCloud refusing the app; add `:update` for the fixed version being out),
+        // `:changed` (update needed), `:update` alone (a newer version is available).
+        if parts.contains("update") { UpdateChecker.shared.preview("0.1.3") }
+        if parts.contains("blocked") {
+            session.health.preview([.controls: .blocked("Forbidden: Browser web session required. External third-party apps are not permitted.")])
+        }
+        if parts.contains("changed") {
+            session.health.preview([.controls: .changed(["getVmStatus now takes 5 values (expected 4)"])])
+        }
         if parts.contains("notice") {
             session.notice = .init(title: "Not Enough Time", message: "You need at least 3 minutes of plan time left to start. Upgrade or add time at truecloud.in.")
         }
