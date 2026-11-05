@@ -3,7 +3,7 @@ import TrueCloudKit
 
 /// Signed-in window: a sidebar with the Cloud PC, Stream, Network, Controllers, Activity and Payments panes and the account footer.
 struct HomeView: View {
-    enum Pane: Hashable { case cloudPC, stream, network, controllers, activity, payments, about }
+    enum Pane: Hashable { case cloudPC, stream, network, controllers, activity, payments, logs, about }
 
     @EnvironmentObject private var auth: AuthStore
     @Environment(\.openURL) private var openURL
@@ -102,6 +102,8 @@ struct HomeView: View {
             ActivityPane(model: activityModel)
         case .payments:
             PaymentsPane(model: paymentsModel)
+        case .logs:
+            LogsPane()
         }
     }
 
@@ -133,6 +135,9 @@ struct HomeView: View {
             }
             NavigationLink(value: Pane.payments) {
                 Label("Payments", systemImage: "creditcard")
+            }
+            NavigationLink(value: Pane.logs) {
+                Label("Logs", systemImage: "doc.text.magnifyingglass")
             }
             NavigationLink(value: Pane.about) {
                 Label("About", systemImage: "info.circle")
@@ -210,6 +215,7 @@ struct HomeView: View {
         if parts.contains("stream") { pane = .stream }
         if parts.contains("network") { pane = .network }
         if parts.contains("about") { pane = .about }
+        if parts.contains("logs") { pane = .logs }
         // `:controllers` opens the pane; add `:sample` for a sample controller mid-press, without hardware.
         if parts.contains("controllers") { pane = .controllers }
         if parts.contains("activity") { pane = .activity; activityModel.preview(Self.sampleActivity) }

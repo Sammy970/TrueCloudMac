@@ -89,6 +89,8 @@ final class SessionService: ObservableObject {
 
     private let auth: AuthStore
     private let driver: StreamDriver?
+    /// The last status-poll error, so the log gets one line per problem instead of one per poll.
+    private var lastStatusError: String?
     private var rig: RigAPI { auth.rig }
     private var pollTask: Task<Void, Never>?
     private var launchTask: Task<Void, Never>?
@@ -102,6 +104,9 @@ final class SessionService: ObservableObject {
     /// How long a power-on may show "stopped" before we call it failed.
     private static let startGrace: TimeInterval = 120
     private static let shutdownGrace: TimeInterval = 180
+
+    /// Whether TrueCloud still works the way this app expects; checked at launch, every 10 minutes and before Start.
+    let health = SiteHealth()
 
     init(auth: AuthStore, driver: StreamDriver? = nil) {
         self.auth = auth
@@ -128,6 +133,7 @@ final class SessionService: ObservableObject {
     // MARK: Polling
 
     func startPolling() {
+        health.start(auth: auth)
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -146,10 +152,11 @@ final class SessionService: ObservableObject {
     /// Faster while something is changing, slower when idle or streaming.
     private var pollInterval: Double {
         switch phase {
-        case .starting, .booting, .shuttingDown, .checking: 3
-        case .ready, .pairing: 5
-        case .idle: 10
-        case .streaming: 15
+        // TrueCloud's own dashboard checks every 6 s; the app never asks more often than that.
+        case .starting, .booting, .shuttingDown, .checking: 6
+        case .ready, .pairing: 8
+        case .idle: 20
+        case .streaming: 30
         }
     }
 
@@ -162,7 +169,8 @@ final class SessionService: ObservableObject {
         }
         guard let p = profile else { return }
         do {
-            let s = try await rig.vmStatus(node: p.node, vmid: p.vmid, sunshineAddress: p.sunshineAddress)
+            let token = try await auth.idToken()
+            let s = try await rig.vmStatus(node: p.node, vmid: p.vmid, sunshineAddress: p.sunshineAddress, idToken: token)
             status = s
             // Counters restart with the VM, so only a running one has a meaningful speed
             if s.isRunning {
@@ -171,9 +179,13 @@ final class SessionService: ObservableObject {
             } else {
                 resetTraffic()
             }
+            if lastStatusError != nil { Log.info("[session] status works again"); lastStatusError = nil }
             apply(s)
         } catch {
-            Log.info("[session] status failed: \(error.localizedDescription)")
+            // Polled every few seconds: log a failure when it starts or changes, not on every poll.
+            let message = error.localizedDescription
+            if message != lastStatusError { Log.info("[session] status failed: \(message)") }
+            lastStatusError = message
             if phase == .checking { phase = .idle }
         }
     }
@@ -213,6 +225,7 @@ final class SessionService: ObservableObject {
     /// Leaves the screen or signs out: stops polling and any stream, but leaves the cloud PC as it is.
     func detach() {
         stopPolling()
+        health.stop()
         launchTask?.cancel()
         driver?.stop()
         streamHost = nil
@@ -239,6 +252,13 @@ final class SessionService: ObservableObject {
             // Time left, the plan and the rig's address may have changed since the app last looked
             lastProfileRefresh = .now
             await auth.reloadProfile()
+            await health.ensureFresh(auth: auth)
+            if let block = health.controlsBlock {
+                startedAt = nil
+                phase = .idle
+                notice = block
+                return
+            }
             if let refusal = await startRefusal() {
                 startedAt = nil
                 phase = .idle
@@ -299,6 +319,7 @@ final class SessionService: ObservableObject {
 
     func unpairAll() {
         guard let p = profile else { return }
+        if let block = health.controlsBlock { notice = block; return }
         Task {
             do {
                 try await withToken { try await self.rig.unpairAllDevices(sunshineAddress: p.sunshineAddress, idToken: $0) }
@@ -310,6 +331,7 @@ final class SessionService: ObservableObject {
     }
 
     private func perform(_ failureTitle: String, to target: Phase, _ action: @escaping (String) async throws -> Void) {
+        if let block = health.controlsBlock { notice = block; return }
         let previous = phase
         launchTask?.cancel()
         driver?.stop()
@@ -361,6 +383,7 @@ final class SessionService: ObservableObject {
     /// Gives Sunshine the PIN Moonlight is showing. False if TrueCloud refused it (try again).
     func submitPairingPIN(_ pin: String) async -> Bool {
         guard let p = profile else { return false }
+        if let block = health.controlsBlock { notice = block; return false }
         do {
             try await withToken { try await self.rig.sendPin(sunshineAddress: p.sunshineAddress, pin: pin, idToken: $0) }
             Log.info("[pair] PIN accepted")

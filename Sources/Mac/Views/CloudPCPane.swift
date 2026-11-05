@@ -29,6 +29,8 @@ struct CloudPCPane: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                SiteHealthBanner(health: session.health)
+                    .padding(.bottom, 16)
                 if let profile = auth.profile {
                     header(profile)
                         .reveal(0)

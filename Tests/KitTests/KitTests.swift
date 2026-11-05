@@ -247,7 +247,7 @@ final class ResolverTests: XCTestCase {
                                (#"createServerReference)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",a.callServer,void 0,a.findSourceMapURL,"startVm")"#, 200)])
         let r = ActionResolver(transport: t)
         let before = try await r.id(for: "startVm")
-        XCTAssertEqual(before, "70f8bc378d09e94014feb9809a73f983a89e3e5ddb")
+        XCTAssertEqual(before, TCConstants.fallbackActionIDs["startVm"])
         try await r.refresh()
         let after = try await r.id(for: "startVm")
         XCTAssertEqual(after, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
@@ -280,9 +280,9 @@ final class RigAPITests: XCTestCase {
 
     func testStatusParse() async throws {
         let t = MockTransport([rsc(#"{"status":"stopped","uptime":0,"lock":null,"hasIp":false,"ip":null,"cpu":0,"mem":0,"maxmem":19327352832,"isSunshineReady":false}"#)])
-        let s = try await RigAPI(transport: t).vmStatus(node: "truecloud-2", vmid: 754, sunshineAddress: "h:35451")
+        let s = try await RigAPI(transport: t).vmStatus(node: "truecloud-2", vmid: 754, sunshineAddress: "h:35451", idToken: "t")
         XCTAssertTrue(s.isStopped)
-        XCTAssertEqual(String(decoding: t.requests[0].httpBody!, as: UTF8.self), #"["truecloud-2",754,"h:35451"]"#)
+        XCTAssertEqual(String(decoding: t.requests[0].httpBody!, as: UTF8.self), #"["truecloud-2",754,"h:35451","t"]"#)
     }
 
     func testStaleIDTriggersReResolveAndRetry() async throws {
@@ -297,6 +297,24 @@ final class RigAPITests: XCTestCase {
         XCTAssertEqual(t.requests[3].value(forHTTPHeaderField: "Next-Action"), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
     }
 
+    func testBlockedClientIsNotASessionExpiry() async {
+        // What truecloud.in started answering on 2026-11-05 to anything that isn't a browser.
+        let t = MockTransport([("Forbidden: Third-party client application blocked.", 403)])
+        do {
+            try await RigAPI(transport: t).startVm(node: "n", vmid: 1, idToken: "t")
+            XCTFail("expected an error")
+        } catch let e as TCError {
+            XCTAssertEqual(e, .clientBlocked("Forbidden: Third-party client application blocked."))
+            XCTAssertTrue(e.localizedDescription.contains("refusing this app"))
+        } catch { XCTFail("\(error)") }
+        XCTAssertEqual(t.requests.count, 1, "a block isn't a stale id: no re-resolve")
+        // A bare 403 is still an expired session.
+        XCTAssertNotNil(TCError.blockedClient(status: 403, body: Data("Forbidden: Only official browser clients may invoke actions.".utf8)))
+        XCTAssertNotNil(TCError.blockedClient(status: 403, body: Data("Forbidden: Browser web session required. External third-party apps are not permitted.".utf8)))
+        XCTAssertNil(TCError.blockedClient(status: 403, body: Data("Forbidden".utf8)))
+        XCTAssertNil(TCError.blockedClient(status: 200, body: Data("Third-party client application blocked".utf8)))
+    }
+
     func testErrorsSurface() async {
         let api = RigAPI(transport: MockTransport([rsc(#"{"error":"Cooldown active"}"#)]))
         do { try await api.startVm(node: "n", vmid: 1, idToken: "t"); XCTFail() }
@@ -309,7 +327,7 @@ final class LiveReadOnlyTests: XCTestCase {
     func testResolverFindsAllActionsOnLiveSite() async throws {
         let resolver = ActionResolver()
         let found: [String: String]
-        do { found = try await resolver.refresh() } catch { throw XCTSkip("offline: \(error)") }
+        do { found = try await resolver.refresh() } catch { throw XCTSkip("offline or blocked: \(error)") }
         for name in TCConstants.fallbackActionIDs.keys {
             XCTAssertNotNil(found[name], "resolver did not find \(name)")
         }
@@ -323,8 +341,12 @@ final class LiveReadOnlyTests: XCTestCase {
     func testLiveGetVmStatus() async throws {
         let api = RigAPI()
         let status: VmStatus
-        do { status = try await api.vmStatus(node: "truecloud-2", vmid: 754, sunshineAddress: "moonlight-a2.truecloud.in:35451") }
-        catch let e as TCError { if case .network = e { throw XCTSkip("offline") }; throw e }
+        do { status = try await api.vmStatus(node: "truecloud-2", vmid: 754, sunshineAddress: "moonlight-a2.truecloud.in:35451", idToken: "") }
+        catch let e as TCError {
+            if case .network = e { throw XCTSkip("offline") }
+            if case .clientBlocked = e { throw XCTSkip("truecloud.in is blocking apps: \(e.localizedDescription)") }
+            throw e
+        }
         print("LIVE getVmStatus:", status)
         XCTAssertTrue(["running", "stopped"].contains(status.status))
     }
