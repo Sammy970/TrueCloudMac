@@ -199,7 +199,7 @@ Google sign-in, which the website also offers, isn't supported. Use "Forgot pass
 
 ## Download
 
-**[Download TrueCloud for Mac 0.1.1](https://github.com/Sammy970/TrueCloudMac/releases/latest)**: no building needed.
+**[Download TrueCloud for Mac 0.1.2](https://github.com/Sammy970/TrueCloudMac/releases/latest)**: no building needed.
 
 1. Install [Moonlight](https://moonlight-stream.org), which does the streaming: `brew install --cask moonlight`.
 2. Unzip, drag **TrueCloud** to Applications and open it.
