@@ -14,7 +14,7 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var dismissed = false
     @Published private(set) var isChecking = false
 
-    private let client = UpdateClient()
+    private let client = UpdateClient(repository: Config.githubRepository)
     private var loopTask: Task<Void, Never>?
     private var lastCheck: Date?
     private static let interval: TimeInterval = 6 * 60 * 60

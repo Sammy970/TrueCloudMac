@@ -13,7 +13,8 @@ enum Config {
     static let appVersion = "0.1.2"
 
     /// Where updates are published.
-    static let releasesURL = URL(string: "https://github.com/Sammy970/TrueCloudMac/releases/latest")!
+    static let githubRepository = "Sammy970/TrueCloudMac"
+    static let releasesURL = URL(string: "https://github.com/\(githubRepository)/releases/latest")!
 
     // MARK: Credits
 

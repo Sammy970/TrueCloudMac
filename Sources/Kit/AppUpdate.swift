@@ -50,19 +50,22 @@ public enum AppVersion {
     }
 }
 
-/// Asks GitHub for the latest release of this app.
+/// Asks GitHub for the latest release of an app ("owner/name", e.g. "Sammy970/TrueCloudMac").
 public struct UpdateClient: Sendable {
-    public static let latestURL = URL(string: "https://api.github.com/repos/Sammy970/TrueCloudMac/releases/latest")!
+    public let latestURL: URL
     private let transport: HTTPTransport
 
-    public init(transport: HTTPTransport = URLSessionTransport()) { self.transport = transport }
+    public init(repository: String, transport: HTTPTransport = URLSessionTransport()) {
+        self.latestURL = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
+        self.transport = transport
+    }
 
     /// The latest release, or nil when there's none yet.
     public func latest() async throws -> AppRelease? {
-        var request = URLRequest(url: Self.latestURL)
+        var request = URLRequest(url: latestURL)
         request.timeoutInterval = 15
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("TrueCloudMac-update-check", forHTTPHeaderField: "User-Agent")
+        request.setValue("TrueCloud-update-check", forHTTPHeaderField: "User-Agent")
         let (data, status) = try await transport.send(request)
         if status == 404 { return nil }
         guard (200..<300).contains(status) else { throw TCError.http(status) }

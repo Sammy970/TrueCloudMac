@@ -495,10 +495,11 @@ final class AppUpdateTests: XCTestCase {
     func testClientReadsLatestAndNoReleaseIsNil() async throws {
         let body = #"{"tag_name":"v9.9.9","html_url":"https://github.com/x/y/releases/tag/v9.9.9","draft":false,"prerelease":false}"#
         let t = MockTransport([(body, 200), (#"{"message":"Not Found"}"#, 404)])
-        let latest = try await UpdateClient(transport: t).latest()
+        let client = UpdateClient(repository: "Sammy970/TrueCloudMac", transport: t)
+        let latest = try await client.latest()
         XCTAssertEqual(latest?.version, "9.9.9")
-        XCTAssertEqual(t.requests[0].url, UpdateClient.latestURL)
-        let none = try await UpdateClient(transport: t).latest()
+        XCTAssertEqual(t.requests[0].url?.absoluteString, "https://api.github.com/repos/Sammy970/TrueCloudMac/releases/latest")
+        let none = try await client.latest()
         XCTAssertNil(none)
     }
 }
